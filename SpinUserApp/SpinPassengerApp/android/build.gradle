@@ -1,0 +1,31 @@
+buildscript {
+    ext {
+        buildToolsVersion = "36.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "2.1.20"
+        // Google Play Services versions - keep all in sync
+        googlePlayServicesVersion = "18.5.0"
+        googlePlayServicesLocationVersion = "21.3.0"
+        googlePlayServicesMapsVersion = "19.1.0"
+        googlePlayServicesBaseVersion = "18.5.0"
+        // Aliases for libraries that read custom ext keys (e.g., react-native-geolocation-service)
+        playServicesVersion = googlePlayServicesLocationVersion
+        playServicesLocationVersion = googlePlayServicesLocationVersion
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        // Google Services plugin for Firebase (required for google-services.json)
+        classpath("com.google.gms:google-services:4.4.2")
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"
