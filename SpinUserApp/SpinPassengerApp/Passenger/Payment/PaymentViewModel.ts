@@ -3,8 +3,8 @@
  * Handles Stripe payment operations via backend
  */
 
-// Use localhost for Android emulator (10.0.2.2 maps to host machine)
-const BACKEND_URL = 'http://10.0.2.2:4242';
+// Production backend URL
+const BACKEND_URL = 'https://stripe-backend-production-fb6e.up.railway.app';
 
 export interface SavedCard {
   id: string;

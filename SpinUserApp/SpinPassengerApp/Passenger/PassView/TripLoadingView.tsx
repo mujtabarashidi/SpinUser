@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { PanGestureHandler, PanGestureHandlerGestureEvent, State } from 'react-native-gesture-handler';
+import { PanGestureHandler, PanGestureHandlerGestureEvent, State, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { HomeContext } from '../context/HomeContext';
 
@@ -107,7 +107,11 @@ export default function TripLoadingView({ visible, onCancel, isLoading, status }
     };
   }, [visible]);
 
-  const effectiveStatus: TripRequestStatus = status || (isLoading ? 'creating' : 'searching');
+  const effectiveStatus: TripRequestStatus = status === 'requested'
+    ? 'searching'
+    : status === 'accepted'
+      ? 'driverAssigned'
+      : status || (isLoading ? 'creating' : 'searching');
   const showDots = effectiveStatus === 'creating' || effectiveStatus === 'searching';
   const dotsText = showDots ? '.'.repeat(dotStep) : '';
 
@@ -183,10 +187,16 @@ export default function TripLoadingView({ visible, onCancel, isLoading, status }
     );
   };
 
-  if (!visible) return null;
+  if (!visible) {
+    console.log('⚠️ [TripLoadingView] Not visible - returning null');
+    return null;
+  }
+
+  console.log('✅ [TripLoadingView] Rendering with status:', effectiveStatus, 'isLoading:', isLoading);
 
   return (
-    <View style={styles.container}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={styles.container}>
       {/* Drag Indicator */}
       <PanGestureHandler onGestureEvent={handleDragGesture} onHandlerStateChange={handleDragStateChange}>
         <View style={styles.dragContainer}>
@@ -302,11 +312,16 @@ export default function TripLoadingView({ visible, onCancel, isLoading, status }
         <Text style={styles.hintText}>Det här tar oftast 10–30 sekunder.</Text>
       </View>
     </View>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,

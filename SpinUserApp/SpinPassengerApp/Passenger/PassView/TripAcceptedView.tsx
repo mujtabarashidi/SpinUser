@@ -30,6 +30,7 @@ import { HomeContext } from '../context/HomeContext';
 import PaymentViewModel from '../Payment/PaymentViewModel';
 import CancelReasonSheetView from './CancelReasonSheetView';
 import DriverRatingModal from './DriverRatingModal';
+import { RouteService } from '../utils/RouteService';
 
 type Coordinate = { latitude: number; longitude: number; bearing?: number };
 
@@ -61,6 +62,14 @@ const TripAcceptedView: React.FC<TripAcceptedViewProps> = ({ trip: initialTrip }
     setEstimatedArrivalDistance,
     setDestinationETA,
     setTrip: setGlobalTrip,
+    // Map/route state
+    pickupCoordinate: pickupCoordinateCtx,
+    destinationCoordinate: destinationCoordinateCtx,
+    setPickupCoordinate,
+    setDestinationCoordinate,
+    routePoints,
+    setRoutePoints,
+    setIsRouteLoading,
   } = useContext(HomeContext);
 
   const [showCancelReasonSheet, setShowCancelReasonSheet] = useState(false);
@@ -120,6 +129,36 @@ const TripAcceptedView: React.FC<TripAcceptedViewProps> = ({ trip: initialTrip }
 
   const pickupCoordinate = useMemo(() => normalizeCoordinate(trip?.pickupLocation), [trip]);
   const dropoffCoordinate = useMemo(() => normalizeCoordinate(trip?.dropoffLocation), [trip]);
+
+  // Ensure map shows polyline from pickup → destination while TripAcceptedView is visible
+  useEffect(() => {
+    // Ensure HomeContext has pickup/destination so SpinMapView can show markers
+    const from = pickupCoordinateCtx ?? normalizeCoordinate(trip?.pickupLocation);
+    const to = destinationCoordinateCtx ?? normalizeCoordinate(trip?.dropoffLocation);
+    if (from && (!pickupCoordinateCtx || (Math.abs(pickupCoordinateCtx.latitude - from.latitude) > 1e-6 || Math.abs(pickupCoordinateCtx.longitude - from.longitude) > 1e-6))) {
+      setPickupCoordinate?.(from as any);
+    }
+    if (to && (!destinationCoordinateCtx || (Math.abs(destinationCoordinateCtx.latitude - to.latitude) > 1e-6 || Math.abs(destinationCoordinateCtx.longitude - to.longitude) > 1e-6))) {
+      setDestinationCoordinate?.(to as any);
+    }
+
+    const fetchAndDrawRoute = async () => {
+      try {
+        const from = pickupCoordinateCtx ?? normalizeCoordinate(trip?.pickupLocation);
+        const to = destinationCoordinateCtx ?? normalizeCoordinate(trip?.dropoffLocation);
+        if (!from || !to) return;
+        if (Array.isArray(routePoints) && routePoints.length > 0) return; // already drawn
+        setIsRouteLoading?.(true);
+        const pts = await RouteService.getRoute(from, to);
+        setRoutePoints?.(pts as any);
+      } catch (e) {
+        // noop – SpinMapView has fallbacks
+      } finally {
+        setIsRouteLoading?.(false);
+      }
+    };
+    fetchAndDrawRoute();
+  }, [pickupCoordinateCtx, destinationCoordinateCtx, routePoints, setRoutePoints, setIsRouteLoading, trip?.pickupLocation, trip?.dropoffLocation]);
 
   const updateDriverLocation = useCallback(
     (coordinate: Coordinate | null) => {

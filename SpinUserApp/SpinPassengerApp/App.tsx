@@ -20,8 +20,8 @@ import LoginPassScreen from './Passenger/SingUp/LoginPassScreen';
 import RegisterPassScreen from './Passenger/SingUp/RegisterPassScreen';
 import HomeScreen from './Passenger/Home/HomeScreen';
 
-// Stripe Publishable Key (Test mode)
-const STRIPE_PUBLISHABLE_KEY = 'pk_test_51QWCWKGECJKmgFzUTqEiOFevkKqtB8N3jQFNnPtlPYLKhZBg8LhKElgQTkHGxGrvHdGRz1a54jywf08PLWRqBK7000kXtD0Qfb';
+// Stripe Publishable Key (Live mode)
+const STRIPE_PUBLISHABLE_KEY = 'pk_live_51RMuwvGBroHhhnNcOqcH2icASZFIIE48yvztnj10HijgOSkQgCTDcOnKRf4HdchCNRXYTemg5WlE0kluECGCercG007vFVF8u7';
 
 const Stack = createNativeStackNavigator();
 

@@ -61,6 +61,7 @@ export default function HomeScreen() {
   const [bookingCount, setBookingCount] = useState(0); // NEW: Antal förbokningar för badge
   const [selectedScheduleDate, setSelectedScheduleDate] = useState(new Date(Date.now() + 30 * 60 * 1000)); // Default: nu + 30 min
   const [isScheduledBooking, setIsScheduledBooking] = useState(false); // NEW: Flagga för om det är förbokning
+  const [isActivelyBooking, setIsActivelyBooking] = useState(false); // Guard to prevent state changes during booking
 
   const { currentUser, signOut } = useAuth();
   const homeContext = useContext(HomeContext) as HomeContextType;
@@ -98,8 +99,25 @@ export default function HomeScreen() {
   useEffect(() => {
     if (currentUser) {
       console.log('👤 [HomeScreen] Current user updated:', currentUser.uid);
+      
+      // Notify server that passenger is online
+      if (socket && socket.connected) {
+        console.log(`👤 [HomeScreen] Notifierar servern: passagerare ${currentUser.uid} online`);
+        socket.emit('passengerOnline', { passengerId: currentUser.uid });
+      }
     }
-  }, [currentUser]);
+  }, [currentUser, socket]);
+
+  // Join trip room if there's an active trip
+  useEffect(() => {
+    if (trip?.id && currentUser?.uid && socket && socket.connected) {
+      console.log(`🔌 [HomeScreen] Joinar trip room: ${trip.id}`);
+      socket.emit('passengerJoinTrip', { 
+        passengerId: currentUser.uid, 
+        tripId: trip.id 
+      });
+    }
+  }, [trip?.id, currentUser?.uid, socket]);
 
   // Request location permission on mount for showsUserLocation to work
   useEffect(() => {
@@ -143,22 +161,32 @@ export default function HomeScreen() {
   useEffect(() => {
     // Treat terminal trips from useTripManager as cleared to avoid loops
     if (managedTrip) {
+      console.log('🔄 [HomeScreen] managedTrip updated:', {
+        id: managedTrip.id,
+        status: managedTrip.status,
+        state: managedTrip.state,
+      });
+      
       const mState = String(managedTrip?.status || managedTrip?.state || '').toLowerCase();
       const isTerminal = [TRIP_STATES.PASSENGER_CANCELLED, 'drivercancelled', 'cancelled', 'completed', 'tripcompleted'].includes(mState);
       const isActiveTrip = ['accepted', 'driverarrived', 'hasdriverarrived', 'inprogress', 'tripinprogress', 'started'].includes(mState);
+      const isSearching = ['requested', 'pending', 'creating', 'searching'].includes(mState);
 
       if (isTerminal) {
+        console.log('⚠️ Trip is terminal, clearing...');
         if (trip !== null) {
           setTrip(null);
         }
         return;
       }
 
-      if (isActiveTrip || mState === 'requested') {
+      if (isActiveTrip || isSearching) {
+        console.log('✅ Setting trip from managedTrip:', mState);
         setTrip(managedTrip);
         return;
       }
       // For any other non-terminal state, prefer clearing to avoid stale loops
+      console.log('⚠️ Unknown trip state, clearing...');
       if (trip !== null) {
         setTrip(null);
       }
@@ -188,16 +216,40 @@ export default function HomeScreen() {
     }
   }, [batteryLevel, mapState]);
 
-  // Monitor coordinate changes and automatically trigger RideRequestView  
+  // Monitor coordinate changes and automatically trigger RideRequestView
+  // Avoid reopening while a trip is being requested or is active
   useEffect(() => {
+    // If actively booking, never interfere with mapState
+    if (isActivelyBooking) {
+      console.log('🔒 [HomeScreen] Booking in progress, blocking coordinate effect');
+      return;
+    }
+
+    // If mapState is already 'tripRequested', don't interfere - we're searching for a driver
+    if (mapState === 'tripRequested') {
+      return;
+    }
+
+    const normalizedStatus = String(tripStatus || trip?.status || trip?.state || '').toLowerCase();
+    const isTripActiveOrRequested = Boolean(trip) || (
+      ['creating','searching','requested','accepted','driverarrived','hasdriverarrived','inprogress','tripinprogress','started']
+        .includes(normalizedStatus)
+    );
+
+    if (isTripActiveOrRequested) {
+      // Do not reopen RideRequestView during search/active trip
+      return;
+    }
+
     if (homeContext.pickupCoordinate &&
       homeContext.destinationCoordinate &&
       (mapState === 'HomeView' || mapState === 'searchingForLocation')) {
-      setTimeout(() => {
+      const t = setTimeout(() => {
         setMapState('polylineAdded');
       }, 500); // Small delay to ensure coordinates are properly set
+      return () => clearTimeout(t);
     }
-  }, [homeContext.pickupCoordinate, homeContext.destinationCoordinate, mapState]);
+  }, [homeContext.pickupCoordinate, homeContext.destinationCoordinate, mapState, trip, tripStatus, isActivelyBooking]);
 
   // 🔥 Lyssna på socket events för trip status uppdateringar från server
   useEffect(() => {
@@ -258,55 +310,19 @@ export default function HomeScreen() {
   }, [trip?.id, socket]);
 
   // Handle trip state changes
+  // Handle trip state changes - Simplified (sheets shown based on trip data)
   useEffect(() => {
     if (!trip) {
-      const isAwaitingTrip = tripStatus === 'creating' || tripStatus === 'searching';
-
-      if (mapState === 'tripRequested' && !isAwaitingTrip) {
-        setMapState('polylineAdded');
-        return;
-      }
-
-      if (
-        mapState !== 'polylineAdded' &&
-        mapState !== 'searchingForLocation' &&
-        mapState !== 'tripRequested'
-      ) {
+      if (mapState === 'tripRequested' || mapState === 'tripAccepted') {
         setMapState('HomeView');
       }
       return;
     }
 
-    // Real-time trip status synchronization with Firebase
     const state = String(trip?.state || trip?.status || '').toLowerCase();
-    console.log('🔄 Trip status changed:', state, '| Current mapState:', mapState);
+    console.log('🔄 Trip status changed:', state);
 
     switch (state) {
-      case 'requested':
-        if (currentUser?.accountType === 'passenger') {
-          console.log('📱 Trip requested - showing TripLoadingView');
-          setMapState('tripRequested');
-        }
-        break;
-
-      case 'accepted':
-        console.log('✅ Driver accepted - showing TripAcceptedView');
-        setMapState('tripAccepted');
-        break;
-
-      case 'driverarrived':
-      case 'hasdriverarrived':
-        console.log('📍 Driver arrived - keeping TripAcceptedView (driver waiting)');
-        setMapState('tripAccepted');
-        break;
-
-      case 'started':
-      case 'inprogress':
-      case 'tripinprogress':
-        console.log('🚗 Trip started/in progress - showing TripAcceptedView');
-        setMapState('tripAccepted');
-        break;
-
       case 'completed':
       case 'tripcompleted':
         console.log('🎉 Trip completed - clearing trip state');
@@ -559,7 +575,14 @@ export default function HomeScreen() {
       return;
     }
 
-    setMapState('tripRequested'); requestTrip({
+    // Sätt mapState först så UI:t uppdateras omedelbart
+    // Stäng RideRequestView och visa TripLoadingView under sökning
+    console.log('🚀 [handleBookTrip] Starting booking flow, setting mapState to tripRequested');
+    setMapState('tripRequested');
+    setIsActivelyBooking(true); // Set guard to prevent state changes during booking
+    
+    // Anropa requestTrip
+    requestTrip({
       currentUser,
       selectedSpinLocation: effectiveSpinLocation,
       selectedPickupLocation: {
@@ -581,28 +604,27 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    if (tripStatus === lastHandledStatusRef.current) {
-      return;
-    }
+    console.log('🔄 [HomeScreen] tripStatus changed:', tripStatus, 'mapState:', mapState, 'isActivelyBooking:', isActivelyBooking);
 
     switch (tripStatus) {
-      case 'creating':
-      case 'searching':
-        setMapState('tripRequested');
-        break;
       case 'noDrivers':
+        setIsActivelyBooking(false);
         Alert.alert(
           'Ingen förare hittades',
           lastError || 'Det finns inga lediga förare i närheten just nu. Försök igen om en stund.',
           [
             {
               text: 'OK',
-              onPress: () => setMapState('polylineAdded'),
+              onPress: () => {
+                setMapState('polylineAdded');
+                setIsActivelyBooking(false);
+              },
             },
           ],
         );
         break;
       case 'error':
+        setIsActivelyBooking(false);
         if (lastError) {
           Alert.alert('Kunde inte boka resan', lastError);
         }
@@ -611,19 +633,35 @@ export default function HomeScreen() {
         }
         break;
       case 'cancelled':
+        setIsActivelyBooking(false);
         if (mapState === 'tripRequested') {
           setMapState('polylineAdded');
         }
         break;
+      case 'searching':
+      case 'creating':
+        // Keep booking guard active during these states
+        if (!isActivelyBooking) {
+          console.log('📦 [HomeScreen] Setting booking guard during search...');
+          setIsActivelyBooking(true);
+        }
+        break;
       default:
+        // For any other status (idle, etc), clear booking guard if it was set
+        if (isActivelyBooking && tripStatus === 'idle') {
+          console.log('📦 [HomeScreen] Clearing booking guard (idle state)');
+          setIsActivelyBooking(false);
+        }
         break;
     }
 
     lastHandledStatusRef.current = tripStatus;
-  }, [tripStatus, lastError, mapState]);
+  }, [tripStatus, lastError, mapState, isActivelyBooking]);
 
   // Overlay logic (bottom overlays)
   const renderCurrentMapOverlay = useMemo(() => () => {
+    console.log('🎯 [renderCurrentMapOverlay] mapState:', mapState, 'tripStatus:', tripStatus, 'isSendingTrip:', isSendingTrip);
+    
     switch (mapState) {
       case 'polylineAdded':
         return (
@@ -646,40 +684,29 @@ export default function HomeScreen() {
             initialScheduledDate={isScheduledBooking ? selectedScheduleDate : undefined}
           />
         );
-      case 'tripRequested':
-        return currentUser?.accountType === 'passenger' ?
-          <TripLoadingView
-            visible={true}
-            isLoading={isSendingTrip}
-            status={tripStatus}
-            onCancel={async () => {
-              console.log('🚫 Trip search cancelled by user');
-              try {
-                // Always release Stripe reservation if this trip was prepaid
-                const paymentIntentId = trip?.paymentIntentId;
-                const method = String(trip?.paymentMethod || '').toLowerCase();
-                const isPrepaid = Boolean(paymentIntentId) && method !== 'kontant' && method !== 'cash';
-                if (isPrepaid && typeof paymentIntentId === 'string') {
-                  console.log('🔓 Releasing reserved Stripe payment due to passenger cancel (searching)…', paymentIntentId);
-                  const ok = await PaymentViewModel.releaseReservedPayment(paymentIntentId, 'passenger_cancelled');
-                  console.log(ok ? '✅ Stripe reservation released' : '⚠️ Failed to release Stripe reservation');
-                }
-              } catch (e) {
-                console.warn('⚠️ Error while releasing Stripe reservation on cancel:', e);
-              } finally {
-                setMapState('polylineAdded'); // Go back to RideRequestView
-                if (setTrip) setTrip(null); // Clear trip state
-              }
-            }}
-          /> : null;
-      case 'tripAccepted':
-        return currentUser?.accountType === 'passenger' && trip ? <TripAcceptedView trip={trip} /> : null;
       case 'tripCancelledByDriver':
         return <TripCancelledView />;
       default:
         return null;
     }
   }, [mapState, currentUser, trip, isSendingTrip, tripStatus, currentLocation, homeContext.queryFragment, isScheduledBooking, selectedScheduleDate, handleBookTrip, setQueryFragment, setDestinationCoordinate, setSelectedSpinLocation, setRoutePoints, setMapState, setSelectedScheduleDate, setIsScheduledBooking, setTrip]);
+
+  // Keep map state in sync with accepted trip so SpinMapView can fit markers/route
+  useEffect(() => {
+    const normalizedStatus = String(tripStatus || trip?.status || trip?.state || '').toLowerCase();
+    const hasDriver = Boolean(trip?.driverId || trip?.driverUid || trip?.driverSnapshot || trip?.driverName);
+    const shouldShowAccepted = hasDriver && currentUser?.accountType === 'passenger' &&
+      ![TRIP_STATES.PASSENGER_CANCELLED, TRIP_STATES.DRIVER_CANCELLED, 'cancelled', 'completed', 'tripcompleted'].includes(normalizedStatus as any);
+
+    if (shouldShowAccepted && mapState !== 'tripAccepted') {
+      console.log('✅ [HomeScreen] Driver assigned, switching to tripAccepted state');
+      setMapState('tripAccepted');
+      setIsActivelyBooking(false); // Clear booking guard when driver is assigned
+    } else if (!shouldShowAccepted && mapState === 'tripAccepted') {
+      console.log('🔄 [HomeScreen] No longer in accepted state, returning to HomeView');
+      setMapState('HomeView');
+    }
+  }, [trip, tripStatus, currentUser?.accountType, mapState]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -882,6 +909,76 @@ export default function HomeScreen() {
       <View style={styles.overlayBottom} pointerEvents="box-none">
         {renderCurrentMapOverlay()}
       </View>
+
+      {(() => {
+        const normalizedStatus = String(tripStatus || trip?.status || trip?.state || '').toLowerCase();
+        const hasDriver = Boolean(trip?.driverId || trip?.driverUid || trip?.driverSnapshot || trip?.driverName);
+
+        // Show loading sheet while we are creating/searching/requested/accepted but no driver attached yet
+        // Also show while mapState is 'tripRequested'
+        const shouldShowLoading = (!hasDriver) && (
+          normalizedStatus === 'creating' ||
+          normalizedStatus === 'searching' ||
+          normalizedStatus === 'requested' ||
+          normalizedStatus === 'accepted' ||
+          normalizedStatus === TRIP_STATES.REQUESTED.toLowerCase() ||
+          mapState === 'tripRequested'
+        );
+
+        // Show accepted view once driver has been assigned (either hasDriver=true OR status='accepted')
+        // Check this BEFORE shouldShowLoading to prevent conflicts
+        const shouldShowAccepted = (hasDriver || normalizedStatus === 'accepted') && currentUser?.accountType === 'passenger';
+
+        if (shouldShowAccepted) {
+          console.log('🟢 Rendering TripAcceptedView', { normalizedStatus, hasDriver, tripId: trip?.id });
+          return (
+            <View style={styles.fullscreenOverlay} pointerEvents="box-none">
+              <TripAcceptedView trip={trip} />
+            </View>
+          );
+        }
+
+        if (shouldShowLoading) {
+          console.log('🟢 Rendering TripLoadingView', { normalizedStatus, hasDriver, mapState, tripId: trip?.id });
+          // isLoading should be true during all search phases: creating, searching, requested, and pending
+          const isActivelySearching = 
+            normalizedStatus === 'creating' || 
+            normalizedStatus === 'searching' || 
+            normalizedStatus === 'requested' || 
+            normalizedStatus === 'pending';
+          return (
+            <View style={styles.fullscreenOverlay} pointerEvents="box-none">
+              <TripLoadingView
+                visible={true}
+                isLoading={isActivelySearching}
+                status={normalizedStatus}
+                onCancel={async () => {
+                  console.log('🚫 Trip search cancelled by user');
+                  try {
+                    // Always release Stripe reservation if this trip was prepaid
+                    const paymentIntentId = trip?.paymentIntentId;
+                    const method = String(trip?.paymentMethod || '').toLowerCase();
+                    const isPrepaid = Boolean(paymentIntentId) && method !== 'kontant' && method !== 'cash';
+                    if (isPrepaid && typeof paymentIntentId === 'string') {
+                      console.log('🔓 Releasing reserved Stripe payment due to passenger cancel (searching)…', paymentIntentId);
+                      const ok = await PaymentViewModel.releaseReservedPayment(paymentIntentId, 'passenger_cancelled');
+                      console.log(ok ? '✅ Stripe reservation released' : '⚠️ Failed to release Stripe reservation');
+                    }
+                  } catch (e) {
+                    console.warn('⚠️ Error while releasing Stripe reservation on cancel:', e);
+                  } finally {
+                    setMapState('polylineAdded'); // Go back to RideRequestView
+                    if (setTrip) setTrip(null); // Clear trip state
+                  }
+                }}
+              />
+            </View>
+          );
+        }
+
+        console.log('ℹ️ No trip sheet rendered', { normalizedStatus, hasDriver, tripId: trip?.id });
+        return null;
+      })()}
     </View>
   );
 }
@@ -901,6 +998,18 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 50,
     elevation: 50,
+  },
+  fullscreenOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-end',
+    // Make background transparent to avoid dimming the map
+    backgroundColor: 'transparent',
+    zIndex: 60,
+    elevation: 60,
   },
   modalContainer: {
     flex: 1,

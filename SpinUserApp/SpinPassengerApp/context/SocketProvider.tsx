@@ -114,12 +114,28 @@ const SocketProvider = ({ children }: PropsWithChildren<{}>) => {
     };
   }, []);
 
+  const [isConnected, setIsConnected] = useState(socket.connected);
+
+  useEffect(() => {
+    const handleConnect = () => setIsConnected(true);
+    const handleDisconnect = () => setIsConnected(false);
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+
+    return () => {
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+    };
+  }, []);
+
   const contextValue = useMemo(() => ({
     on: socket.on.bind(socket),
     off: socket.off.bind(socket),
     emit: socket.emit.bind(socket),
     once: socket.once.bind(socket),
-  }), []);
+    connected: isConnected,
+  }), [isConnected]);
 
   return (
     <SocketContext.Provider value={contextValue}>
