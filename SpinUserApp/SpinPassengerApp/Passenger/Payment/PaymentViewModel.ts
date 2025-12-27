@@ -143,22 +143,22 @@ class PaymentViewModel {
     amount: number,
     currency: string,
     customerId: string,
-    paymentMethodId?: string
+    paymentMethodId?: string,
+    tripId?: string
   ): Promise<PaymentIntentResponse | null> {
     try {
-      console.log(`📡 [PaymentViewModel] Creating PaymentIntent: ${amount} ${currency}`);
-      
-      const response = await fetch(`${BACKEND_URL}/create-payment-intent`, {
+      const amountInCents = Math.round(amount * 100);
+      console.log(`📡 [PaymentViewModel] Creating PaymentIntent: ${amountInCents} (currency=${currency})${tripId ? ` tripId=${tripId}` : ''}`);
+
+      // Om tripId finns, använd ordinarie endpoint som kräver tripId
+      const endpoint = tripId ? '/create-payment-intent' : '/precreate-payment-intent';
+      const body: any = { amount: amountInCents, customerId };
+      if (tripId) body.tripId = tripId;
+
+      const response = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amount: Math.round(amount * 100), // Convert to cents
-          currency,
-          customerId,
-          paymentMethodId,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -183,37 +183,50 @@ class PaymentViewModel {
    * Charge a saved card
    */
   async chargeSavedCard(
+    customerId: string,
     paymentMethodId: string,
     amount: number,
-    currency: string,
-    customerId: string
+    tripId?: string
   ): Promise<{ success: boolean; paymentIntentId?: string; error?: string }> {
     try {
-      const paymentIntent = await this.createPaymentIntent(amount, currency, customerId, paymentMethodId);
-      
-      if (!paymentIntent) {
-        return { success: false, error: 'Failed to create payment intent' };
+      const amountInCents = Math.round(amount * 100);
+      console.log(`📡 [PaymentViewModel] Charging saved card: amount=${amountInCents}${tripId ? `, tripId=${tripId}` : ''}`);
+
+      const response = await fetch(`${BACKEND_URL}/charge-saved-card`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId,
+          paymentMethodId,
+          amount: amountInCents,
+          tripId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        const message = data?.error || `Backend error: ${response.status}`;
+        console.error('❌ [PaymentViewModel] Charge card failed:', message);
+        return { success: false, error: message };
       }
 
       return {
         success: true,
-        paymentIntentId: paymentIntent.paymentIntentId,
+        paymentIntentId: data.paymentIntentId,
       };
     } catch (error: any) {
       console.error('❌ [PaymentViewModel] Error charging card:', error);
-      return {
-        success: false,
-        error: error.message || 'Unknown error',
-      };
+      return { success: false, error: error.message || 'Unknown error' };
     }
   }
 
   /**
    * Capture a payment intent
    */
-  async capturePaymentIntent(paymentIntentId: string): Promise<boolean> {
+  async capturePaymentIntent(paymentIntentId: string, amountToCapture: number): Promise<boolean> {
     try {
-      console.log(`📡 [PaymentViewModel] Capturing payment: ${paymentIntentId}`);
+      console.log(`📡 [PaymentViewModel] Capturing payment: ${paymentIntentId} amount=${amountToCapture}`);
       
       const response = await fetch(`${BACKEND_URL}/capture-payment`, {
         method: 'POST',
@@ -222,6 +235,7 @@ class PaymentViewModel {
         },
         body: JSON.stringify({
           paymentIntentId,
+          amountToCapture: Math.round(amountToCapture * 100),
         }),
       });
 
@@ -242,17 +256,18 @@ class PaymentViewModel {
   /**
    * Cancel/release a payment intent
    */
-  async releaseReservedPayment(paymentIntentId: string, reason?: string): Promise<boolean> {
+  async releaseReservedPayment(paymentIntentId: string, reason?: string, tripId?: string): Promise<boolean> {
     try {
-      console.log(`📡 [PaymentViewModel] Canceling payment: ${paymentIntentId}`);
+      console.log(`📡 [PaymentViewModel] Canceling payment: ${paymentIntentId}${tripId ? ` (tripId=${tripId})` : ''}`);
       
-      const response = await fetch(`${BACKEND_URL}/cancel-payment`, {
+      const response = await fetch(`${BACKEND_URL}/cancel-payment-intent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           paymentIntentId,
+          tripId,
           reason,
         }),
       });

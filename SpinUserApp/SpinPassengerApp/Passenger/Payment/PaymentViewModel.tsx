@@ -8,8 +8,8 @@
 import { useStripe } from '@stripe/stripe-react-native';
 import { useCallback, useState } from 'react';
 
-// Backend URL - Använder spintaxi-realtime-server för allt (Socket.IO + Stripe)
-const STRIPE_BACKEND_URL = 'https://spintaxi-realtime-server-production.up.railway.app';
+// Backend URL - Använder stripe-backend-main (manuell capture)
+const STRIPE_BACKEND_URL = 'https://stripe-backend-production-fb6e.up.railway.app';
 
 export interface SavedCard {
     id: string; // Stripe payment method id
@@ -86,40 +86,44 @@ class PaymentViewModel {
         tripId?: string
     ): Promise<PaymentIntentResult> {
         try {
-            const body: any = {
-                amount: Math.round(amount * 100), // Konvertera till öre/cent
-                customerId,
-            };
+            const amountInCents = Math.round(amount * 100);
 
+            // Om tripId finns, använd ordinarie endpoint som sparar på trip
             if (tripId) {
-                body.tripId = tripId;
+                console.log(`📡 Skapar PaymentIntent för trip ${tripId} (amount=${amountInCents})`);
+                const response = await fetch(`${STRIPE_BACKEND_URL}/create-payment-intent`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount: amountInCents, customerId, tripId }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.clientSecret) {
+                    return { success: true, paymentIntentId: data.paymentIntentId };
+                }
+
+                return { success: false, error: data.error || 'Kunde inte skapa PaymentIntent' };
             }
 
-            const response = await fetch(`${STRIPE_BACKEND_URL}/create-payment-intent`, {
+            // Annars använd precreate-endpoint som inte kräver tripId
+            console.log(`📡 Förskapar PaymentIntent utan trip (amount=${amountInCents})`);
+            const response = await fetch(`${STRIPE_BACKEND_URL}/precreate-payment-intent`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
+                body: JSON.stringify({ amount: amountInCents, customerId }),
             });
 
             const data = await response.json();
 
-            if (data.clientSecret) {
-                return {
-                    success: true,
-                    paymentIntentId: data.paymentIntentId,
-                };
+            if (response.ok && data.clientSecret) {
+                return { success: true, paymentIntentId: data.paymentIntentId };
             }
 
-            return {
-                success: false,
-                error: data.error || 'Kunde inte skapa PaymentIntent',
-            };
+            return { success: false, error: data.error || 'Kunde inte skapa PaymentIntent' };
         } catch (error: any) {
             console.error('❌ Fel vid skapande av PaymentIntent:', error);
-            return {
-                success: false,
-                error: error.message || 'Nätverksfel',
-            };
+            return { success: false, error: error.message || 'Nätverksfel' };
         }
     }
 
@@ -387,7 +391,7 @@ class PaymentViewModel {
         try {
             console.log(`🔓 Släpper reserverad betalning: ${paymentIntentId}`);
 
-            const response = await fetch(`${STRIPE_BACKEND_URL}/release-payment`, {
+            const response = await fetch(`${STRIPE_BACKEND_URL}/cancel-payment-intent`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

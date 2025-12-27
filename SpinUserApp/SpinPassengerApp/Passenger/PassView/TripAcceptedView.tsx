@@ -355,6 +355,21 @@ const TripAcceptedView: React.FC<TripAcceptedViewProps> = ({ trip: initialTrip }
                 break;
               case [TRIP_STATES.DRIVER_CANCELLED, 'cancelled'].includes(rawStatus as TripState):
                 setShowCancelReasonSheet(false);
+                // Ensure Stripe reservation is released if driver cancels
+                try {
+                  const pid = (liveTrip?.paymentIntentId || (trip as any)?.paymentIntentId) as string | undefined;
+                  const method = String(liveTrip?.paymentMethod || (trip as any)?.paymentMethod || '').toLowerCase();
+                  const prepaid = Boolean(pid) && method !== 'kontant' && method !== 'cash';
+                  if (prepaid && typeof pid === 'string') {
+                    console.log('🔓 [TripAcceptedView] Releasing reserved Stripe payment due to driver cancel…', pid);
+                    PaymentViewModel
+                      .releaseReservedPayment(pid, 'driver_cancelled', trip?.id)
+                      .then((ok) => console.log(ok ? '✅ [TripAcceptedView] Stripe reservation released' : '⚠️ [TripAcceptedView] Failed to release Stripe reservation'))
+                      .catch((e) => console.warn('⚠️ [TripAcceptedView] Error releasing Stripe reservation (driver cancel):', e));
+                  }
+                } catch (e) {
+                  console.warn('⚠️ [TripAcceptedView] Failed to evaluate Stripe release on driver cancel:', e);
+                }
                 // Uppdatera global state så HomeScreen reagerar
                 setGlobalTrip((prevTrip: any) => (prevTrip ? { ...prevTrip, ...liveTrip } : prevTrip));
                 // Låt HomeScreen visa central avboknings-alert. Ingen extra Alert här för att undvika dubbletter.
@@ -448,7 +463,7 @@ const TripAcceptedView: React.FC<TripAcceptedViewProps> = ({ trip: initialTrip }
           const isPrepaid = Boolean(paymentIntentId) && method !== 'kontant' && method !== 'cash';
           if (isPrepaid && typeof paymentIntentId === 'string') {
             console.log('🔓 [TripAcceptedView] Releasing reserved Stripe payment due to passenger cancel…', paymentIntentId);
-            const ok = await PaymentViewModel.releaseReservedPayment(paymentIntentId, 'passenger_cancelled');
+            const ok = await PaymentViewModel.releaseReservedPayment(paymentIntentId, 'passenger_cancelled', trip?.id);
             console.log(ok ? '✅ [TripAcceptedView] Stripe reservation released' : '⚠️ [TripAcceptedView] Failed to release Stripe reservation');
           }
         } catch (err) {

@@ -17,7 +17,8 @@ import PassengerTripDetailView from './PassengerTripDetailView';
 // --- Types ---
 interface TripDoc {
   id: string;
-  riderId: string;
+  riderId?: string;
+  passengerUid?: string;
   driverId?: string;
   pickupLocationAddress: string;
   dropoffLocationAddress: string;
@@ -38,40 +39,89 @@ interface TripDoc {
   createdAt?: any;
   startedAt?: any;
   canceledAt?: any;
+  cancelledAt?: any;
+  fromDeleted?: boolean; // marker for docs coming from deleted_trips
 }
 
 const PAGE_SIZE = 10;
 
-// Fetch passenger trips from Firestore
+// Normalize helpers
+function normalizeStatus(s?: string): string {
+  return String(s || '').toLowerCase();
+}
+
+function getSortMillisFromAny(val: any): number | null {
+  try {
+    if (!val) return null;
+    if (val?.toDate) {
+      const d: Date = val.toDate();
+      return isNaN(d.getTime()) ? null : d.getTime();
+    }
+    if (typeof val?.seconds === 'number') {
+      const d = new Date(val.seconds * 1000);
+      return isNaN(d.getTime()) ? null : d.getTime();
+    }
+    if (val instanceof Date) {
+      return isNaN(val.getTime()) ? null : val.getTime();
+    }
+    if (typeof val === 'number') {
+      const ms = val < 2_000_000_000 ? val * 1000 : val;
+      const d = new Date(ms);
+      return isNaN(d.getTime()) ? null : d.getTime();
+    }
+    if (typeof val === 'string') {
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? null : d.getTime();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function getSortMillis(t: TripDoc): number {
+  const candidates = [
+    getSortMillisFromAny(t.createdAt),
+    getSortMillisFromAny(t.completedAt),
+    getSortMillisFromAny((t as any).cancelledAt ?? t.canceledAt),
+    getSortMillisFromAny(t.startedAt),
+  ].filter((n): n is number => typeof n === 'number');
+  return candidates.length ? Math.max(...candidates) : 0;
+}
+
+// Fetch passenger trips from users/{userId}/history collection
 async function fetchPassengerTrips(
   riderId: string,
   limit: number,
   lastDoc?: TripDoc
 ): Promise<{ trips: TripDoc[]; hasMore: boolean }> {
   try {
-    let query = firestore()
-      .collection('trips')
-      .where('riderId', '==', riderId)
-      .orderBy('createdAt', 'desc')
-      .limit(limit + 1); // Fetch one extra to determine if there are more
+    const historyRef = firestore()
+      .collection('users')
+      .doc(riderId)
+      .collection('history');
+
+    let query = historyRef.orderBy('completedAt', 'desc').limit(limit);
 
     if (lastDoc) {
-      query = query.startAfter(firestore.Timestamp.fromDate(new Date(lastDoc.createdAt?.toDate?.() || lastDoc.createdAt)));
+      query = query.startAfter(lastDoc);
     }
 
-    const snapshot = await query.get();
-    const docs = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    } as TripDoc));
+    const snap = await query.get();
 
-    const hasMore = docs.length > limit;
-    return {
-      trips: hasMore ? docs.slice(0, limit) : docs,
-      hasMore,
-    };
+    const trips: TripDoc[] = snap.docs.map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as any),
+    }));
+
+    console.log('✅ [PassengerTripHistory] Fetched trips:', {
+      pageCount: trips.length,
+      hasMore: trips.length >= limit,
+    });
+
+    return { trips, hasMore: trips.length >= limit };
   } catch (error) {
-    console.error('Error fetching passenger trips:', error);
+    console.error('❌ [PassengerTripHistory] Error fetching passenger trips:', error);
     throw error;
   }
 }
@@ -86,6 +136,7 @@ export default function PassengerTripHistoryView() {
   const [canLoadMore, setCanLoadMore] = useState(false);
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState<TripDoc | null>(null);
+  const [filter, setFilter] = useState<'all' | 'completed' | 'cancelled'>('all');
 
   // Formatters (Swedish locale)
   const formatCurrency = useMemo(
@@ -131,13 +182,23 @@ export default function PassengerTripHistoryView() {
   };
 
   const computeDistanceKm = (t: TripDoc) => {
-    const km = t.actualDistanceInKm ?? t.distanceTodropoffLocation ?? 0;
-    return Number.isFinite(km) ? km : 0;
+    if (typeof t.actualDistanceInKm === 'number' && t.actualDistanceInKm > 0) {
+      return t.actualDistanceInKm;
+    }
+    if (typeof t.distanceTodropoffLocation === 'number' && t.distanceTodropoffLocation > 0) {
+      // distanceTodropoffLocation är meter – konvertera till km
+      return t.distanceTodropoffLocation / 1000;
+    }
+    return null;
   };
   const computeTimeMin = (t: TripDoc) => {
-    if (typeof t.actualTravelTimeInSeconds === 'number') return Math.round(t.actualTravelTimeInSeconds / 60);
-    if (typeof t.travelTimeTodropoffLocation === 'number') return Math.round(t.travelTimeTodropoffLocation);
-    return 0;
+    if (typeof t.actualTravelTimeInSeconds === 'number' && t.actualTravelTimeInSeconds > 0) {
+      return Math.round(t.actualTravelTimeInSeconds / 60);
+    }
+    if (typeof t.travelTimeTodropoffLocation === 'number' && t.travelTimeTodropoffLocation > 0) {
+      return Math.round(t.travelTimeTodropoffLocation);
+    }
+    return null;
   };
 
   const fetchInitial = useCallback(async () => {
@@ -185,17 +246,24 @@ export default function PassengerTripHistoryView() {
   };
 
   const renderItem = ({ item }: { item: TripDoc }) => {
-    const km = computeDistanceKm(item);
-    const mins = computeTimeMin(item);
+    const kmVal = computeDistanceKm(item);
+    const minsVal = computeTimeMin(item);
     const d = toJSDate(item.completedAt);
     const when = d ? formatDateTime(d) : '—';
     const idShort = item.id?.slice(-6) || item.id;
+    const s = normalizeStatus(item.status);
+    const isCancelled = item.fromDeleted || s.includes('cancel');
+    const badgeLabel = isCancelled ? 'Avbokad' : 'Slutförd';
+    const kmText = kmVal != null ? `${kmVal >= 10 ? kmVal.toFixed(1) : kmVal.toFixed(2)} km` : '—';
+    const minText = minsVal != null ? `${minsVal} min` : '—';
     return (
       <TouchableOpacity style={styles.row} onPress={() => onPressTrip(item)} activeOpacity={0.85}>
         <View style={styles.rowTop}>
-          <Text style={styles.metaText}>{`${km.toFixed(2)} km / ${mins} min`}</Text>
+          <Text style={styles.metaText}>{`${kmText} / ${minText}`}</Text>
           <View style={styles.rightCol}>
-            <View style={styles.badge}><Text style={styles.badgeText}>Slutförd</Text></View>
+            <View style={[styles.badge, isCancelled && { backgroundColor: '#FFF3E0' }]}>
+              <Text style={[styles.badgeText, isCancelled && { color: '#C77700' }]}>{badgeLabel}</Text>
+            </View>
             <Text style={styles.tripIdText}>ID: {idShort}</Text>
             <Text style={styles.priceText}>{formatCurrency.format(item.tripCost)}</Text>
           </View>
@@ -212,6 +280,20 @@ export default function PassengerTripHistoryView() {
     );
   };
 
+  const filteredTrips = useMemo(() => {
+    if (filter === 'all') return trips;
+    const sCompleted = new Set(['completed', 'tripcompleted']);
+    const sCancelled = new Set(['drivercancelled', 'passengercancelled', 'cancelled']);
+    return trips.filter((t) => {
+      const s = normalizeStatus(t.status);
+      const isCompleted = sCompleted.has(s) || t.completedAt != null;
+      const isCancelled = t.fromDeleted || sCancelled.has(s) || (t as any).cancelledAt != null || t.canceledAt != null;
+      if (filter === 'completed') return isCompleted;
+      if (filter === 'cancelled') return isCancelled;
+      return true;
+    });
+  }, [filter, trips]);
+
   return (
     <SafeAreaView style={styles.safe}>
       {/* Header */}
@@ -220,6 +302,28 @@ export default function PassengerTripHistoryView() {
         <TouchableOpacity onPress={onRefresh} accessibilityLabel="Uppdatera">
           <Ionicons name="reload" size={20} color="#111" />
         </TouchableOpacity>
+      </View>
+
+      {/* Filter pills */}
+      <View style={styles.filterRow}>
+        {([
+          { key: 'all', label: 'Alla' },
+          { key: 'completed', label: 'Slutförda' },
+          { key: 'cancelled', label: 'Avbokade' },
+        ] as const).map(({ key, label }) => {
+          const active = filter === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[styles.filterPill, active && styles.filterPillActive]}
+              onPress={() => setFilter(key)}
+              accessibilityLabel={`Filter ${label}`}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.filterText, active && styles.filterTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {/* Content */}
@@ -236,7 +340,7 @@ export default function PassengerTripHistoryView() {
       ) : (
         <View style={{ flex: 1 }}>
           <FlatList
-            data={trips}
+            data={filteredTrips}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             refreshing={isRefreshing}
@@ -306,4 +410,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A84FF',
   },
   moreBtnText: { color: '#fff', fontWeight: '700' },
+  filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb' },
+  filterPill: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: '#f3f4f6' },
+  filterPillActive: { backgroundColor: '#0A84FF' },
+  filterText: { fontSize: 13, fontWeight: '700', color: '#111' },
+  filterTextActive: { color: '#fff' },
 });

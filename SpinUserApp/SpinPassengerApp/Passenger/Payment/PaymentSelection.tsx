@@ -17,7 +17,8 @@ import {
     View,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import PaymentViewModel, { SavedCard, usePaymentSheet } from './PaymentViewModel';
+import PaymentViewModel, { SavedCard } from './PaymentViewModel';
+import usePaymentSheet from './usePaymentSheet';
 
 export type PaymentMethod = 'card' | 'google_pay' | 'cash';
 
@@ -237,7 +238,7 @@ const PaymentSelection: React.FC<PaymentSelectionProps> = ({
                                     </Text>
                                     <Text style={styles.cardNumber}>•••• {card.last4}</Text>
                                     <Text style={styles.cardExpiry}>
-                                        Utgår {card.expiryMonth}/{card.expiryYear}
+                                        Utgår {card.expMonth}/{card.expYear}
                                     </Text>
                                 </View>
                                 {selectedCardId === card.id ? (

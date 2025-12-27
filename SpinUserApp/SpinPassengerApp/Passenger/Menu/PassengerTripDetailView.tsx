@@ -49,32 +49,45 @@ export default function PassengerTripDetailView({ visible, onClose, trip }: Pass
         return date.toLocaleString('sv-SE');
     }
 
-    function formatNumber(value: any, decimals = 2): string {
+    const formatNumber = (value: any, decimals = 2): string => {
         const n = Number(value);
         if (Number.isFinite(n)) return n.toFixed(decimals);
         const s = String(value ?? '').trim();
         return s || '-';
-    }
+    };
 
-    const distance = useMemo(
-        () => trip ? formatNumber(trip.actualDistanceInKm ?? trip.distanceTodropoffLocation) : '0',
-        [trip]
-    );
-    const travelTime = useMemo(
-        () => trip
-            ? formatNumber(
-                trip.actualTravelTimeInSeconds
-                    ? Math.round(trip.actualTravelTimeInSeconds / 60)
-                    : trip.travelTimeTodropoffLocation,
-                0
-            )
-            : '0',
-        [trip]
-    );
-    const fare = useMemo(
-        () => trip ? formatNumber(trip.tripCost) : '0',
-        [trip]
-    );
+    const formatDistance = (raw: any): string => {
+        if (typeof raw === 'number') {
+            const decimals = raw >= 10 ? 1 : 2;
+            return raw.toFixed(decimals);
+        }
+        return '-';
+    };
+
+    const distance = useMemo(() => {
+        if (!trip) return '-';
+        if (typeof trip.actualDistanceInKm === 'number' && trip.actualDistanceInKm > 0) {
+            return formatDistance(trip.actualDistanceInKm);
+        }
+        if (typeof trip.distanceTodropoffLocation === 'number' && trip.distanceTodropoffLocation > 0) {
+            // distanceTodropoffLocation är meter – konvertera till km
+            return formatDistance(trip.distanceTodropoffLocation / 1000);
+        }
+        return '-';
+    }, [trip]);
+
+    const travelTime = useMemo(() => {
+        if (!trip) return '-';
+        if (typeof trip.actualTravelTimeInSeconds === 'number' && trip.actualTravelTimeInSeconds > 0) {
+            return formatNumber(Math.round(trip.actualTravelTimeInSeconds / 60), 0);
+        }
+        if (typeof trip.travelTimeTodropoffLocation === 'number' && trip.travelTimeTodropoffLocation > 0) {
+            return formatNumber(trip.travelTimeTodropoffLocation, 0);
+        }
+        return '-';
+    }, [trip]);
+
+    const fare = useMemo(() => (trip ? formatNumber(trip.tripCost) : '0'), [trip]);
 
     return (
         <Modal visible={visible} animationType="slide" onRequestClose={onClose}>

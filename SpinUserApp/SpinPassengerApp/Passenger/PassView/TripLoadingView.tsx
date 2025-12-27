@@ -224,7 +224,7 @@ export default function TripLoadingView({ visible, onCancel, isLoading, status }
             </View>
           </View>
           <TouchableOpacity onPress={handleCancelTrip} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.cancelTextInline}>Avbryt</Text>
+          
           </TouchableOpacity>
         </View>
         <Text style={styles.subtitleText}>{statusText}{dotsText}</Text>

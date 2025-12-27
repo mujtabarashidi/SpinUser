@@ -200,13 +200,9 @@ export default function WalletView({ onClose }: WalletViewProps) {
                 {/* Header */}
                 <View style={[styles.header, { backgroundColor: isDarkMode ? '#1c1c1e' : '#f8f9fa' }]}>
                     <View style={styles.headerTop}>
-                        <TouchableOpacity style={styles.backButton} onPress={onClose}>
-                            <Icon name="arrow-back" size={24} color={isDarkMode ? '#fff' : '#000'} />
-                        </TouchableOpacity>
                         <Text style={[styles.headerTitle, { color: isDarkMode ? '#fff' : '#000' }]}>
                             Min Plånbok
                         </Text>
-                        <View style={styles.headerSpacer} />
                     </View>
                     <Text style={[styles.headerSubtitle, { color: isDarkMode ? '#8e8e93' : '#666' }]}>
                         Hantera dina betalningsmetoder
@@ -219,13 +215,6 @@ export default function WalletView({ onClose }: WalletViewProps) {
                         <Text style={[styles.sectionTitle, { color: isDarkMode ? '#fff' : '#000' }]}>
                             Betalningsmetoder
                         </Text>
-                        <TouchableOpacity onPress={handleAddPaymentMethod} disabled={isAddingCard}>
-                            {isAddingCard ? (
-                                <ActivityIndicator size="small" color="#007AFF" />
-                            ) : (
-                                <Icon name="add-circle-outline" size={24} color="#007AFF" />
-                            )}
-                        </TouchableOpacity>
                     </View>
 
                     {paymentOptions.length === 0 ? (
@@ -247,39 +236,36 @@ export default function WalletView({ onClose }: WalletViewProps) {
                             </TouchableOpacity>
                         </View>
                     ) : (
-                        paymentOptions.map((option) => (
-                            <View key={option.id} style={[styles.paymentMethodCard, { backgroundColor: isDarkMode ? '#1c1c1e' : '#fff' }]}>
-                                <PaymentButton
-                                    paymentOption={option}
-                                    onPress={() => setSelectedPayment(option)}
-                                    style={StyleSheet.flatten([
-                                        styles.paymentMethod,
-                                        selectedPayment?.id === option.id && styles.selectedPaymentMethod
-                                    ])}
-                                    size="large"
-                                />
+                        <>
+                            {paymentOptions.map((option) => (
+                                <View key={option.id} style={[styles.paymentMethodCard, { backgroundColor: isDarkMode ? '#1c1c1e' : '#fff' }]}>
+                                    <PaymentButton
+                                        paymentOption={option}
+                                        onPress={() => setSelectedPayment(option)}
+                                        style={StyleSheet.flatten([
+                                            styles.paymentMethod,
+                                            selectedPayment?.id === option.id && styles.selectedPaymentMethod
+                                        ])}
+                                        size="large"
+                                    />
 
-                                {/* Kort-detaljer för sparade kort */}
-                                {option.savedCard && (
-                                    <View style={styles.cardDetails}>
-                                        <Text style={[styles.cardBrand, { color: isDarkMode ? '#8e8e93' : '#666' }]}>
-                                            {option.savedCard.brand} • Utgår {option.savedCard.expiryMonth}/{option.savedCard.expiryYear}
-                                        </Text>
-                                        <Text style={[styles.cardHolder, { color: isDarkMode ? '#8e8e93' : '#666' }]}>
-                                            {option.savedCard.holderName}
-                                        </Text>
-                                    </View>
+                                </View>
+                            ))}
+                            <TouchableOpacity 
+                                style={[styles.addCardButton, isAddingCard && styles.addButtonDisabled]}
+                                onPress={handleAddPaymentMethod} 
+                                disabled={isAddingCard}
+                            >
+                                {isAddingCard ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <>
+                                        <Icon name="add-circle-outline" size={20} color="#fff" />
+                                        <Text style={styles.addCardButtonText}>Lägg till kort</Text>
+                                    </>
                                 )}
-
-                                {/* Remove button */}
-                                <TouchableOpacity
-                                    style={styles.removeButton}
-                                    onPress={() => handleRemovePaymentMethod(option)}
-                                >
-                                    <Icon name="trash-outline" size={20} color="#ff3b30" />
-                                </TouchableOpacity>
-                            </View>
-                        ))
+                            </TouchableOpacity>
+                        </>
                     )}
                 </View>
 
@@ -446,6 +432,23 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: '600',
+    },
+    addCardButton: {
+        backgroundColor: '#007AFF',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginHorizontal: 12,
+        marginBottom: 16,
+    },
+    addCardButtonText: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '600',
+        marginLeft: 8,
     },
     paymentMethodCard: {
         marginBottom: 12,

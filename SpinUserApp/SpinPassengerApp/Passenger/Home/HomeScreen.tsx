@@ -26,6 +26,9 @@ import SpinMapView from './SpinMapView';
 import BookingDatePickerView from '../Forbokning/BookingDatePickerView';
 import ReserveradView from '../Forbokning/ReserveradView';
 
+// Import RatingView
+import RatingView from '../Rating/RatingView';
+
 // Placeholder/fallback components for overlays and modals
 const TripCancelledView = () => null;
 const LocationPermissionBanner = () => null;
@@ -62,6 +65,8 @@ export default function HomeScreen() {
   const [selectedScheduleDate, setSelectedScheduleDate] = useState(new Date(Date.now() + 30 * 60 * 1000)); // Default: nu + 30 min
   const [isScheduledBooking, setIsScheduledBooking] = useState(false); // NEW: Flagga för om det är förbokning
   const [isActivelyBooking, setIsActivelyBooking] = useState(false); // Guard to prevent state changes during booking
+  const [showRatingView, setShowRatingView] = useState(false); // Show rating modal after trip completion
+  const [ratingTrip, setRatingTrip] = useState<any | null>(null); // Trip data for rating
 
   const { currentUser, signOut } = useAuth();
   const homeContext = useContext(HomeContext) as HomeContextType;
@@ -325,15 +330,53 @@ export default function HomeScreen() {
     switch (state) {
       case 'completed':
       case 'tripcompleted':
-        console.log('🎉 Trip completed - clearing trip state');
-        // TODO: Show rating view if exists
-        setMapState('HomeView');
-        if (setTrip) setTrip(null);
+        console.log('🎉 Trip completed - showing rating view');
+        // Show RatingView with trip data
+        setRatingTrip(trip);
+        setShowRatingView(true);
         break;
 
       case 'cancelled':
       case TRIP_STATES.DRIVER_CANCELLED:
         console.log('❌ Trip cancelled by driver');
+        // Visa meddelande om att föraren avbokade resan
+        Alert.alert(
+          'Resan avbokad',
+          'Föraren avbokade din resa.',
+          [{
+            text: 'OK',
+            onPress: () => {
+              // Avsluta och gå tillbaka till HomeView
+              setMapState('HomeView');
+              if (setTrip) setTrip(null);
+              // Rensa sök-/destinationsstate för att förhindra auto-öppning
+              setQueryFragment('');
+              setDestinationCoordinate(null);
+              setSelectedSpinLocation(null);
+              setRoutePoints([]);
+              // Avbryt väntande fallback-timer om den finns
+              if (cancelTimeoutRef.current) {
+                clearTimeout(cancelTimeoutRef.current);
+                cancelTimeoutRef.current = null;
+              }
+            }
+          }]
+        );
+        // Release any reserved Stripe authorization if present (driver cancelled)
+        try {
+          const paymentIntentId = trip?.paymentIntentId as string | undefined;
+          const method = String(trip?.paymentMethod || '').toLowerCase();
+          const isPrepaid = Boolean(paymentIntentId) && method !== 'kontant' && method !== 'cash';
+          if (isPrepaid && typeof paymentIntentId === 'string') {
+            console.log('🔓 Releasing reserved Stripe payment due to driver cancel…', paymentIntentId);
+            PaymentViewModel
+              .releaseReservedPayment(paymentIntentId, 'driver_cancelled', trip.id)
+              .then((ok) => console.log(ok ? '✅ Stripe reservation released' : '⚠️ Failed to release Stripe reservation'))
+              .catch((e) => console.warn('⚠️ Error releasing Stripe reservation (driver cancel):', e));
+          }
+        } catch (e) {
+          console.warn('⚠️ Failed to evaluate Stripe release on driver cancel:', e);
+        }
         setMapState('tripCancelledByDriver');
         // Clear any existing timeout
         if (cancelTimeoutRef.current) {
@@ -354,10 +397,25 @@ export default function HomeScreen() {
 
       case TRIP_STATES.PASSENGER_CANCELLED:
         console.log('❌ Trip cancelled by passenger');
+        // Release any reserved Stripe authorization if present (passenger cancelled)
+        try {
+          const paymentIntentId = trip?.paymentIntentId as string | undefined;
+          const method = String(trip?.paymentMethod || '').toLowerCase();
+          const isPrepaid = Boolean(paymentIntentId) && method !== 'kontant' && method !== 'cash';
+          if (isPrepaid && typeof paymentIntentId === 'string') {
+            console.log('🔓 Releasing reserved Stripe payment due to passenger cancel…', paymentIntentId);
+            PaymentViewModel
+              .releaseReservedPayment(paymentIntentId, 'passenger_cancelled', trip.id)
+              .then((ok) => console.log(ok ? '✅ Stripe reservation released' : '⚠️ Failed to release Stripe reservation'))
+              .catch((e) => console.warn('⚠️ Error releasing Stripe reservation (passenger cancel):', e));
+          }
+        } catch (e) {
+          console.warn('⚠️ Failed to evaluate Stripe release on passenger cancel:', e);
+        }
         // Visa bekräftelse direkt och gå tillbaka till HomeView
         Alert.alert(
           'Resan avbokad',
-          'Din resa har avbokats.',
+          'Din resa avbokades.',
           [{
             text: 'OK',
             onPress: () => {
@@ -436,7 +494,7 @@ export default function HomeScreen() {
 
     const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => sub.remove();
-  }, [mapState, showSideMenu, showScheduleModal, showBookingsModal, setTrip]);
+  }, [mapState, showSideMenu, showScheduleModal, showBookingsModal, showRatingView, setTrip]);
 
   // Handle trip booking
   const handleBookTrip = async (rideType: RideType, paymentOption: PaymentOption, note: string, scheduledDate?: Date, customPrice?: number) => {
@@ -961,7 +1019,7 @@ export default function HomeScreen() {
                     const isPrepaid = Boolean(paymentIntentId) && method !== 'kontant' && method !== 'cash';
                     if (isPrepaid && typeof paymentIntentId === 'string') {
                       console.log('🔓 Releasing reserved Stripe payment due to passenger cancel (searching)…', paymentIntentId);
-                      const ok = await PaymentViewModel.releaseReservedPayment(paymentIntentId, 'passenger_cancelled');
+                      const ok = await PaymentViewModel.releaseReservedPayment(paymentIntentId, 'passenger_cancelled', trip?.id);
                       console.log(ok ? '✅ Stripe reservation released' : '⚠️ Failed to release Stripe reservation');
                     }
                   } catch (e) {
@@ -979,6 +1037,36 @@ export default function HomeScreen() {
         console.log('ℹ️ No trip sheet rendered', { normalizedStatus, hasDriver, tripId: trip?.id });
         return null;
       })()}
+
+      {/* Rating View - Show after trip completion */}
+      <RatingView
+        visible={showRatingView}
+        trip={ratingTrip}
+        onClose={() => {
+          setShowRatingView(false);
+          setRatingTrip(null);
+          // Clear trip and return to HomeView
+          if (setTrip) setTrip(null);
+          setMapState('HomeView');
+          // Clear search state to prevent RideRequestView auto-reopen
+          setQueryFragment('');
+          setDestinationCoordinate(null);
+          setSelectedSpinLocation(null);
+          setRoutePoints([]);
+        }}
+        onRatingSubmitted={() => {
+          console.log('✅ Rating submitted, clearing trip state');
+          setShowRatingView(false);
+          setRatingTrip(null);
+          if (setTrip) setTrip(null);
+          setMapState('HomeView');
+          // Clear search state to prevent RideRequestView auto-reopen
+          setQueryFragment('');
+          setDestinationCoordinate(null);
+          setSelectedSpinLocation(null);
+          setRoutePoints([]);
+        }}
+      />
     </View>
   );
 }

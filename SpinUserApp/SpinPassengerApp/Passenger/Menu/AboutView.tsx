@@ -4,9 +4,9 @@ import { StyleSheet, Text, View } from 'react-native';
 export default function AboutView() {
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Om SPIN</Text>
+      <Text style={styles.header}>Om Spin</Text>
       <Text style={styles.text}>
-        SPIN är en taxi‑app byggd i Stockholm. Vi fokuserar på säker, pålitlig och
+        Spin är en taxi‑app byggd i Stockholm. Vi fokuserar på säker, pålitlig och
         transparent resa för både passagerare och förare.
       </Text>
       <Text style={styles.version}>Version 1.0.0</Text>
