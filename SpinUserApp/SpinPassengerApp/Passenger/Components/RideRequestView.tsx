@@ -671,7 +671,7 @@ export default function RideRequestView({
       // Processa betalning om det inte är kontant eller företag
       if (selectedPaymentOption.type !== 'cash' && selectedPaymentOption.type !== 'company') {
         const paymentManager = PaymentManager.getInstance();
-        const paymentRequest = { merchantName: 'Spin Taxi', amount: String(price), currencyCode: 'SEK', countryCode: 'SE' } as const;
+        const paymentRequest = { merchantName: 'Spin', amount: String(price), currencyCode: 'SEK', countryCode: 'SE' } as const;
         const paymentResult = await paymentManager.processPayment(selectedPaymentOption, paymentRequest);
         if (!paymentResult.success) {
           const userMessage = getPaymentErrorMessage(paymentResult.error);

@@ -128,16 +128,29 @@ export default function PassengerTripDetailView({ visible, onClose, trip }: Pass
                                 <Text style={[styles.label, { color: colors.textMuted }]}>Resa-ID</Text>
                                 <Text style={[styles.value, { color: colors.textPrimary }]}>{trip.id}</Text>
                             </View>
+                             <View style={styles.row}>
+                                <Text style={[styles.label, { color: colors.textMuted }]}>Datum</Text>
+                                <Text style={[styles.value, { color: colors.textPrimary }]}>{formatDate(trip.completedAt)}</Text>
+                            </View>
                             <View style={[styles.divider, { backgroundColor: colors.border }]} />
                             <View style={styles.row}>
                                 <Text style={[styles.label, { color: colors.textMuted }]}>Status</Text>
                                 <Text style={[styles.value, { color: colors.success }]}>Slutförd</Text>
                             </View>
-                            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                            <View style={styles.row}>
-                                <Text style={[styles.label, { color: colors.textMuted }]}>Datum</Text>
-                                <Text style={[styles.value, { color: colors.textPrimary }]}>{formatDate(trip.completedAt)}</Text>
-                            </View>
+                            
+                            {trip.paymentMethod && (
+                                <>
+                                    <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                                    <View style={styles.row}>
+                                        <Text style={[styles.label, { color: colors.textMuted }]}>Metod</Text>
+                                        <Text style={[styles.value, { color: colors.textPrimary }]}>{trip.paymentMethod}</Text>
+                                    </View>
+                                      <View style={styles.row}>
+                                        <Text style={[styles.label, { color: colors.textMuted }]}>Typ</Text>
+                                        <Text style={[styles.value, { color: colors.textPrimary }]}>{trip.selectedRideType}</Text>
+                                    </View>
+                                </>
+                            )}
                         </View>
 
                         {/* Location Details */}
@@ -207,58 +220,6 @@ export default function PassengerTripDetailView({ visible, onClose, trip }: Pass
                             )}
                         </View>
 
-                        {/* Payment Details */}
-                        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Betalning</Text>
-                        <View style={[styles.infoCard, { backgroundColor: colors.surfaceAlt }]}>
-                            <View style={styles.row}>
-                                <Text style={[styles.label, { color: colors.textMuted }]}>Totalt</Text>
-                                <Text style={[styles.value, { color: colors.textPrimary, fontWeight: 'bold' }]}>{fare} kr</Text>
-                            </View>
-                            {trip.paymentMethod && (
-                                <>
-                                    <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                                    <View style={styles.row}>
-                                        <Text style={[styles.label, { color: colors.textMuted }]}>Metod</Text>
-                                        <Text style={[styles.value, { color: colors.textPrimary }]}>{trip.paymentMethod}</Text>
-                                    </View>
-                                </>
-                            )}
-                            {trip.selectedRideType && (
-                                <>
-                                    <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                                    <View style={styles.row}>
-                                        <Text style={[styles.label, { color: colors.textMuted }]}>Typ</Text>
-                                        <Text style={[styles.value, { color: colors.textPrimary }]}>{trip.selectedRideType}</Text>
-                                    </View>
-                                </>
-                            )}
-                        </View>
-
-                        {/* Driver Rating */}
-                        {trip.driverRating && (
-                            <>
-                                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Förarens betyg</Text>
-                                <View style={[styles.ratingCard, { backgroundColor: colors.surfaceAlt }]}>
-                                    <View style={styles.starsRow}>
-                                        {[...Array(5)].map((_, i) => (
-                                            <Ionicons
-                                                key={i}
-                                                name={i < (trip.driverRating ?? 0) ? 'star' : 'star-outline'}
-                                                size={20}
-                                                color={colors.accent}
-                                            />
-                                        ))}
-                                    </View>
-                                    {trip.driverComment && (
-                                        <Text style={[styles.ratingComment, { color: colors.textSecondary, marginTop: 8 }]}>
-                                            "{trip.driverComment}"
-                                        </Text>
-                                    )}
-                                </View>
-                            </>
-                        )}
-
-                        <View style={{ height: 24 }} />
                     </ScrollView>
                 ) : (
                     <View style={styles.center}>
@@ -278,25 +239,30 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 14,
+        borderBottomWidth: StyleSheet.hairlineWidth,
     },
     headerTitle: {
-        fontSize: 18,
-        fontWeight: '600',
+        fontSize: 20,
+        fontWeight: '700',
     },
 
     // Summary Card
     summaryCard: {
-        margin: 16,
-        padding: 16,
-        borderRadius: 12,
+        marginHorizontal: 16,
+        marginTop: 16,
+        marginBottom: 12,
+        paddingVertical: 18,
+        paddingHorizontal: 16,
+        borderRadius: 16,
     },
     summaryRow: {
         flexDirection: 'row',
         justifyContent: 'space-around',
         alignItems: 'center',
+        gap: 12,
     },
     summaryLabel: {
         fontSize: 12,
@@ -311,14 +277,14 @@ const styles = StyleSheet.create({
     infoCard: {
         marginHorizontal: 16,
         marginBottom: 16,
-        padding: 16,
-        borderRadius: 12,
+        padding: 18,
+        borderRadius: 16,
     },
     row: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: 8,
+        paddingVertical: 10,
     },
     label: {
         fontSize: 14,
@@ -330,14 +296,15 @@ const styles = StyleSheet.create({
         textAlign: 'right',
     },
     divider: {
-        height: 1,
-        marginVertical: 8,
+        height: StyleSheet.hairlineWidth,
+        marginVertical: 10,
     },
 
     // Location
     locationRow: {
         flexDirection: 'row',
         alignItems: 'flex-start',
+        paddingVertical: 6,
     },
     locationText: {
         flex: 1,
@@ -354,11 +321,11 @@ const styles = StyleSheet.create({
 
     // Section Title
     sectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
+        fontSize: 17,
+        fontWeight: '700',
         marginHorizontal: 16,
-        marginTop: 20,
-        marginBottom: 10,
+        marginTop: 28,
+        marginBottom: 12,
     },
 
     // Rating Card
