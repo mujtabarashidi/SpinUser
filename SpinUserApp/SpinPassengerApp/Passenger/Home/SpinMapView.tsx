@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { RouteService } from '../../utils/RouteService';
 import DriverMarker from '../Components/DriverMarker';
 import { HomeContext } from '../context/HomeContext';
@@ -126,7 +127,7 @@ export default function SpinMapView({ mapState, userLocation }: SpinMapViewProps
       right: 0,
       bottom: mapState === 'HomeView' ? 200 : 100,
     },
-    default: { top: 0, left: 0, right: 0, bottom: 0 },
+    default: { top: 0, left: 0, right: 50, bottom: 150 },
   });
 
   const assignedDriverCoordinate = useMemo(() => {
@@ -227,7 +228,7 @@ export default function SpinMapView({ mapState, userLocation }: SpinMapViewProps
         provider={PROVIDER_GOOGLE}
         style={styles.map}
         showsUserLocation={true}
-        showsMyLocationButton={true}
+        showsMyLocationButton={false}
         followsUserLocation={mapState === 'HomeView' && !pickupCoordinate && !destinationCoordinate && !assignedDriverCoordinate}
         // Guard map padding until map is fully ready to avoid null native refs
         mapPadding={isMapReady ? mapPadding as any : undefined}
@@ -323,6 +324,24 @@ export default function SpinMapView({ mapState, userLocation }: SpinMapViewProps
           <ActivityIndicator size="large" color="#1976D2" />
         </View>
       )}
+
+      {/* Custom GPS Button - Positioned in bottom right */}
+      <TouchableOpacity
+        style={styles.gpsButton}
+        onPress={() => {
+          if (userLocation && mapRef.current) {
+            const region: Region = {
+              latitude: userLocation.latitude,
+              longitude: userLocation.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            };
+            mapRef.current.animateToRegion(region, 500);
+          }
+        }}
+      >
+        <Icon name="locate" size={24} color="#1976D2" />
+      </TouchableOpacity>
     </View>
   );
 }
@@ -342,6 +361,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderRadius: 10,
     padding: 10,
+  },
+  gpsButton: {
+    position: 'absolute',
+    top: 58,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 10,
   },
   driverMarker: {
     alignItems: 'center',

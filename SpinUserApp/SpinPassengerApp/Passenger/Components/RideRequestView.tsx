@@ -11,7 +11,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -29,6 +28,7 @@ import { HomeContext } from '../context/HomeContext';
 import BookingDatePickerView from '../Forbokning/BookingDatePickerView';
 import DriverNoteModal from './DriverNoteModal';
 import PaymentSelectionView from './PaymentSelectionView';
+import CustomPriceView from '../PassView/CustomPriceView';
 
 // Helper to shorten long addresses (keep first meaningful part + city/district if possible)
 function formatAddress(raw: string): string {
@@ -762,8 +762,14 @@ export default function RideRequestView({
               <View key={ride.id} style={styles.rideRowWrapper}>
                 <TouchableOpacity
                   style={[styles.rideTypeCard, isActive && styles.rideTypeActive, isDisabled && styles.rideTypeDisabled]}
-                  onPress={() => ride.isAvailable && setSelectedRideType(ride)}
-                  disabled={isDisabled}
+                  onPress={() => {
+                    if (!(ride.isAvailable || isPrebooked)) return;
+                    if (isActive) {
+                      openCustomPrice(ride);
+                    } else {
+                      setSelectedRideType(ride);
+                    }
+                  }}
                   activeOpacity={0.85}
                 >
                   <View style={styles.rideLeft}>
@@ -775,9 +781,6 @@ export default function RideRequestView({
                       <View style={styles.metaRow}>
                         <Icon name="person" size={12} color="#8E8E93" />
                         <Text style={styles.passengerCount}>{ride.passengerCount}</Text>
-                        {ride.estimatedTime && !isDisabled && !isPrebooked && (
-                          <View style={styles.etaChip}><Text style={styles.etaText}>{ride.estimatedTime}</Text></View>
-                        )}
                         {isPrebooked && (
                           <View style={styles.prebookChip}>
                             <Icon name="calendar" size={12} color="#2E7D32" />
@@ -787,17 +790,28 @@ export default function RideRequestView({
                           <Text style={[styles.availableText, styles.unavailable]}>Upptagen</Text>
                         )}
                       </View>
+                      {!isDisabled && (
+                        <Text style={[styles.rideTypeTagline, isDisabled && styles.disabledText]}>{ride.description}</Text>
+                      )}
                     </View>
                   </View>
                   <View style={styles.priceBlock}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <Text style={[styles.priceText, isDisabled && styles.disabledText]}>{formatCurrency.format(price)}</Text>
-                      <TouchableOpacity onPress={() => !isDisabled && openCustomPrice(ride)} activeOpacity={0.8}>
-                        <Icon name="add-circle" size={16} color={isDisabled ? '#C7C7CC' : '#007AFF'} />
-                      </TouchableOpacity>
+                      {isActive && (
+                        <TouchableOpacity onPress={() => !isDisabled && openCustomPrice(ride)} activeOpacity={0.8}>
+                          <Icon name="add-circle" size={16} color={isDisabled ? '#C7C7CC' : '#007AFF'} />
+                        </TouchableOpacity>
+                      )}
                     </View>
                     {hasCustomPrice(ride) && (
                       <Text style={styles.strikePrice}>{formatCurrency.format(ride.basePrice)}</Text>
+                    )}
+                    {!isDisabled && !isPrebooked && (
+                      <View style={styles.priceEtaRow}>
+                        <Icon name="time" size={12} color="#8E8E93" />
+                        <Text style={styles.priceEtaText}>{ride.estimatedTime || 'Beräknar...'}</Text>
+                      </View>
                     )}
                   </View>
                 </TouchableOpacity>
@@ -909,7 +923,7 @@ export default function RideRequestView({
       </View>
 
       {/* Custom Price Sheet */}
-      <CustomPriceModal
+      <CustomPriceView
         visible={showCustomPriceSheet}
         originalPrice={selectedRideType ? selectedRideType.basePrice : 0}
         onClose={() => setShowCustomPriceSheet(false)}
@@ -950,109 +964,6 @@ export default function RideRequestView({
         </View>
       </Modal>
     </View>
-  );
-}
-
-// --- Modals ---
-function CustomPriceModal({ visible, originalPrice, onClose, onSave }: { visible: boolean; originalPrice: number; onClose: () => void; onSave: (value: number) => void; }) {
-  const [value, setValue] = useState<string>('');
-  const [focus, setFocus] = useState(false);
-  const num = Number(value.replace(/[^0-9]/g, '')) || 0;
-  const currency = useMemo(() => new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 0 }), []);
-
-  // 10% rabatt redan applicerad
-  const discountedPrice = Math.round(originalPrice * 0.90);
-  const valid = num > 0 && num !== originalPrice && num >= discountedPrice;
-  const isBelowMinimum = value !== '' && num < discountedPrice && num > 0;
-
-  useEffect(() => {
-    if (!visible) {
-      setValue('');
-      setFocus(false);
-    } else {
-      setValue(String(discountedPrice));
-    }
-  }, [visible, discountedPrice]);
-
-  const bump = (percent: number) => {
-    const base = num || discountedPrice;
-    const next = Math.round(base * (1 + percent / 100));
-    setValue(String(next));
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalCard}>
-          {/* Blå rabatt-banner */}
-          <View style={styles.discountBanner}>
-            <Icon name="checkmark-circle" size={20} color="#fff" />
-            <Text style={styles.discountBannerText}>10% rabatt tillämpas</Text>
-          </View>
-
-          <View style={{ padding: 16 }}>
-            <Text style={styles.modalTitle}>Ange eget pris</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-              <Text style={styles.modalSub}>Taxa: {currency.format(discountedPrice)}</Text>
-              <Text style={[styles.modalSub, { textDecorationLine: 'line-through', color: '#d1d5db' }]}>
-                {currency.format(originalPrice)}
-              </Text>
-            </View>
-
-            <View style={styles.priceInputRow}>
-              <Icon name="card" size={20} color="#9ca3af" />
-              <TextInput
-                keyboardType="numeric"
-                placeholder="Ange belopp eller öka med %"
-                placeholderTextColor="#6b7280"
-                value={value}
-                onChangeText={setValue}
-                onFocus={() => setFocus(true)}
-                style={styles.priceInput}
-              />
-              {!!value && (
-                <TouchableOpacity onPress={() => setValue('')}>
-                  <Icon name="close-circle" size={18} color="#d1d5db" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={styles.presetRow}>
-              <PresetChip title="+5 %" onPress={() => bump(5)} />
-              <PresetChip title="+10 %" onPress={() => bump(10)} />
-              <PresetChip title="+20 %" onPress={() => bump(20)} />
-            </View>
-
-            {isBelowMinimum && (
-              <View style={{ marginTop: 12, padding: 12, backgroundColor: '#FEE2E2', borderRadius: 8, borderLeftWidth: 3, borderLeftColor: '#DC2626' }}>
-                <Text style={{ color: '#991B1B', fontSize: 13, fontWeight: '600' }}>
-                  Priset kan inte vara mindre än {currency.format(discountedPrice)}
-                </Text>
-              </View>
-            )}
-
-            <View style={{ marginTop: 16, padding: 12, backgroundColor: '#F3F4F6', borderRadius: 8 }}>
-              <Text style={{ color: '#6b7280', fontSize: 13, textAlign: 'center' }}>
-                Bra pris för dig – rättvis ersättning för föraren.
-              </Text>
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalBtn} onPress={onClose}>
-                <Text style={styles.modalBtnText}>Stäng</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, valid ? styles.modalPrimary : styles.modalDisabled]}
-                disabled={!valid}
-                onPress={() => onSave(num)}
-              >
-                <Text style={[styles.modalBtnText, { color: '#fff' }]}>Bekräfta pris</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </View>
-    </Modal>
   );
 }
 
@@ -1238,6 +1149,7 @@ const styles = StyleSheet.create({
   scheduleBtn: { width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center' },
   carEmoji: { fontSize: 18 },
   rideTypeName: { fontSize: 15, fontWeight: '600', color: '#111' },
+    rideTypeTagline: { fontSize: 12, color: '#666', marginTop: 2, marginBottom: 4 },
   passengerCount: { fontSize: 11, color: '#8E8E93', marginLeft: 4 },
   unavailableText: { fontSize: 11, color: '#FF8C34' },
   // Availability label styles
@@ -1245,123 +1157,32 @@ const styles = StyleSheet.create({
   available: { color: '#2E7D32' },
   unavailable: { color: '#FF8C34' },
   priceText: { fontSize: 15, fontWeight: '600', color: '#000' },
+  priceEtaRow: { marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  priceEtaText: { fontSize: 12, color: '#6b7280' },
   disabledText: { color: '#42425bff' },
   strikePrice: { fontSize: 11, color: '#6b7280', textDecorationLine: 'line-through', marginTop: 2 },
+  chip: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#F0F0F0', borderRadius: 16, marginHorizontal: 4 },
+  chipText: { fontSize: 13, fontWeight: '600', color: '#333' },
 
   // Modal styles
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 },
-  modalCard: { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: '#e5e7eb' },
-  discountBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#007AFF',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-  discountBannerText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#111' },
-  modalSub: { color: '#6b7280', fontSize: 14, fontWeight: '600' },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 50,
-    paddingBottom: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  modalCloseBtn: {
-    padding: 8,
-  },
-  modalHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    flex: 1,
-    textAlign: 'center',
-  },
-  // Sheet styles (bottom sheet)
-  sheetBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheetContainer: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '85%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  sheetCloseBtn: {
-    padding: 4,
-  },
-  sheetTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-    flex: 1,
-    textAlign: 'center',
-  },
-  // Date Picker Modal styles
   datePickerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: '#fff',
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#E5E7EB',
   },
   datePickerCloseBtn: {
-    padding: 4,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   datePickerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#111827',
-    flex: 1,
-    textAlign: 'center',
   },
-  priceInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: '#e5e7eb' },
-  priceInput: { flex: 1, fontSize: 16, paddingVertical: 4 },
-  presetRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,122,255,0.1)',
-    borderWidth: 1,
-    borderColor: '#007AFF'
-  },
-  chipText: { fontSize: 13, fontWeight: '600', color: '#000' },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 16 },
-  modalBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, backgroundColor: '#F3F4F6' },
-  modalBtnText: { fontWeight: '700', color: '#111' },
-  modalPrimary: { backgroundColor: '#0A84FF' },
-  modalDisabled: { backgroundColor: '#94a3b8' },
 });
