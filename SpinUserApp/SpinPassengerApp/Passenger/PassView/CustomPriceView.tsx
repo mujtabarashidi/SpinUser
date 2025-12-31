@@ -71,13 +71,20 @@ export default function CustomPriceView({ visible, originalPrice, onClose, onSav
           style={[styles.modalCard, { transform: [{ translateY }] }]}
           {...panResponder.panHandlers}
         >
-          <View style={styles.sheetHandleContainer} {...panResponder.panHandlers}>
-            <View style={styles.sheetHandle} />
+          {/* Top bar with drag handle & close button */}
+          <View style={styles.topBar}>
+            <View style={styles.dragHandle} />
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Icon name="close" size={22} color="#111" />
+            </TouchableOpacity>
           </View>
-          {/* Blå rabatt-banner */}
+         
+          {/* Gul rabatt-banner med X-knapp */}
           <View style={styles.discountBanner}>
-            <Icon name="checkmark-circle" size={20} color="#fff" />
-            <Text style={styles.discountBannerText}>10% rabatt tillämpas</Text>
+            <View style={styles.discountBannerContent}>
+              <Icon name="checkmark-circle" size={20} color="#fff" />
+              <Text style={styles.discountBannerText}>10% rabatt tillämpas</Text>
+            </View>
           </View>
 
           <View style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 20 }}>
@@ -128,9 +135,6 @@ export default function CustomPriceView({ visible, originalPrice, onClose, onSav
             </View>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalBtn} onPress={onClose}>
-                <Text style={styles.modalBtnText}>Stäng</Text>
-              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtn, valid ? styles.modalPrimary : styles.modalDisabled]}
                 disabled={!valid}
@@ -171,27 +175,41 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: -8 },
   },
-  sheetHandleContainer: {
-    alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 6,
-  },
-  sheetHandle: {
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#D1D5DB',
-  },
-  discountBanner: {
-    flexDirection: 'row',
+ 
+  topBar: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    paddingTop: 24,
+    paddingBottom: 8,
+  },
+
+  dragHandle: {
+    width: 40,
+   
+  },
+
+  closeButton: {
+    position: 'absolute',
+    right: 18,
+    top: 0,
+    padding: 6,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+  },
+
+  discountBanner: {
     backgroundColor: '#ffb700ff',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discountBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   discountBannerText: {
     fontSize: 16,

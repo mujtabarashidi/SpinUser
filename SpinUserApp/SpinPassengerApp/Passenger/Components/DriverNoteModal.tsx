@@ -37,6 +37,9 @@ export const DriverNoteModal: React.FC<DriverNoteModalProps> = ({ visible, initi
         >
             <View style={styles.backdrop}>
                 <View style={styles.sheet}>
+                    <Pressable style={styles.closeBtn} onPress={onCancel}>
+                        <Text style={styles.closeBtnText}>✕</Text>
+                    </Pressable>
                     <View style={styles.grabber} />
                     <Text style={styles.title}>Kommentar till förare</Text>
 
@@ -60,9 +63,7 @@ export const DriverNoteModal: React.FC<DriverNoteModalProps> = ({ visible, initi
                     <Pressable style={styles.saveBtn} onPress={() => onSave(note.trim())}>
                         <Text style={styles.saveText}>Spara</Text>
                     </Pressable>
-                    <Pressable style={styles.cancelBtn} onPress={onCancel}>
-                        <Text style={styles.cancelText}>Avbryt</Text>
-                    </Pressable>
+                   
                 </View>
             </View>
         </Modal>
@@ -81,8 +82,8 @@ const styles = StyleSheet.create({
     input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 10, minHeight: 80, textAlignVertical: 'top', fontSize: 16 },
     saveBtn: { backgroundColor: '#007AFF', paddingVertical: 14, borderRadius: 10, alignItems: 'center', marginTop: 16 },
     saveText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-    cancelBtn: { paddingVertical: 12, alignItems: 'center', marginTop: 4 },
-    cancelText: { color: '#444', fontSize: 15 },
+    closeBtn: { position: 'absolute', top: 12, right: 16, zIndex: 10, padding: 8 },
+    closeBtnText: { color: '#666', fontSize: 24, fontWeight: '300' },
 });
 
 export default DriverNoteModal;

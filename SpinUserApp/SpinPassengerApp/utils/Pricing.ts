@@ -67,7 +67,21 @@ export function computePrice(type: RideTypeKey, distanceInMeters: number, custom
     const price = km * mult + base;
     // Höj priset med 10% (matchar iOS)
     const increasedPrice = price * 1.10;
-    return Math.round(increasedPrice);
+    
+    // Nyårshöjning för Spin och Komfort (matchar server-kod)
+    let finalPrice = increasedPrice;
+    if (type === 'Spin' || type === 'Komfort') {
+        const now = new Date();
+        const day = now.getDate();
+        const month = now.getMonth() + 1; // 0-index -> 1-index
+        if (month === 12 && day === 31) {
+            finalPrice *= 1.20; // +20% på nyårsafton
+        } else if (month === 1 && day === 1) {
+            finalPrice *= 1.30; // +30% på nyårsdagen
+        }
+    }
+    
+    return Math.round(finalPrice);
 }
 
 /**
