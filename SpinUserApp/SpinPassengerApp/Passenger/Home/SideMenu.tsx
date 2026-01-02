@@ -390,21 +390,9 @@ export default function SideMenu({ user, onClose, bookingCount = 0, onShowBookin
         </TouchableOpacity>
       </ScrollView>
 
-      {/* About Overlay Modal */}
-      <Modal
-        visible={showAboutOverlay}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAboutOverlay(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          onPress={() => setShowAboutOverlay(false)}
-        >
-          <View style={[styles.aboutOverlay, { backgroundColor: '#ffffff' }]}>
-            <AboutView />
-          </View>
-        </TouchableOpacity>
+      {/* About Modal */}
+      <Modal visible={showAboutOverlay} animationType="slide" onRequestClose={() => setShowAboutOverlay(false)}>
+        <AboutView navigation={{ goBack: () => setShowAboutOverlay(false) }} />
       </Modal>
 
       {/* Settings Modal */}

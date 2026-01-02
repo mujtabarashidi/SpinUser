@@ -528,6 +528,14 @@ export default function RideRequestView({
         isAvailable: available,
         estimatedTime: isPrebooked ? undefined : etaByType[etaKey],
       } as RideType;
+    })
+    .sort((a, b) => {
+      // Sort by availability first (available cars come first)
+      if (a.isAvailable !== b.isAvailable) {
+        return a.isAvailable ? -1 : 1;
+      }
+      // If same availability, keep original order
+      return 0;
     });
 
   // Formatters
@@ -560,15 +568,18 @@ export default function RideRequestView({
 
   // Set default selections
   useEffect(() => {
-    if (!selectedRideType && rideTypes.length > 0) {
+    if (rideTypes.length > 0) {
+      // Always select the first available ride, never select an unavailable one
       const availableRide = rideTypes.find(r => r.isAvailable);
-      setSelectedRideType(availableRide || rideTypes[0]);
+      if (availableRide) {
+        setSelectedRideType(availableRide);
+      }
     }
     // Default to first available payment option
     if (!selectedPaymentOption && paymentOptions.length > 0) {
       setSelectedPaymentOption(paymentOptions[0]);
     }
-  }, [nearbyDrivers, paymentOptions, isPrebooked]);
+  }, [rideTypes, paymentOptions]);
 
   // Keep tripPayer in sync with the selected payment option
   useEffect(() => {

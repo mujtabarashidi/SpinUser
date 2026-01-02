@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Coordinate, GeocodingService, LocationResult } from '../../utils/GeocodingService';
+import RecentSearchesService from '../../services/RecentSearchesService';
 
 export type LocationSearchConfig = 'pickup' | 'ride';
 
@@ -9,12 +10,14 @@ interface LocationSearchResultsViewProps {
   config: LocationSearchConfig;
   searchQuery: string;
   onSelectLocation: (address: string, coordinate: Coordinate) => void;
+  userId?: string;
 }
 
 export default function LocationSearchResultsView({
   config,
   searchQuery,
-  onSelectLocation
+  onSelectLocation,
+  userId
 }: LocationSearchResultsViewProps) {
   const [searchResults, setSearchResults] = useState<LocationResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -41,7 +44,11 @@ export default function LocationSearchResultsView({
     return () => clearTimeout(searchWithDebounce);
   }, [searchQuery]);
 
-  const handleLocationSelect = (result: LocationResult) => {
+  const handleLocationSelect = async (result: LocationResult) => {
+    // Save to recent searches
+    if (userId) {
+      await RecentSearchesService.saveSearch(userId, result.formatted_address, result.coordinates);
+    }
     onSelectLocation(result.formatted_address, result.coordinates);
   };
 

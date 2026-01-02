@@ -16,6 +16,9 @@ import { PassengerLocationService } from '../../services/LocationService';
 import { Coordinate, GeocodingService } from '../../utils/GeocodingService';
 import { RouteService } from '../../utils/RouteService';
 import { HomeContext } from '../context/HomeContext';
+import RecentSearchesService, { RecentSearch } from '../../services/RecentSearchesService';
+import SavedPlacesService from '../../services/SavedPlacesService';
+import { useAuthViewModel } from '../../Authentication/AuthManager';
 
 interface LocationSearchViewProps {
   onClose: () => void;
@@ -70,7 +73,9 @@ export default function LocationSearchView({ onClose }: LocationSearchViewProps)
   };
   const [activeField, setActiveField] = useState<'pickup' | 'destination'>('destination');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const { currentUser } = useAuthViewModel();
 
   const pickupRef = useRef<TextInput>(null);
   const destinationRef = useRef<TextInput>(null);
@@ -79,7 +84,16 @@ export default function LocationSearchView({ onClose }: LocationSearchViewProps)
   // Initialize location when component mounts
   useEffect(() => {
     fetchUserLocation();
+    loadRecentSearches();
   }, []);
+
+  // Load recent searches
+  const loadRecentSearches = async () => {
+    if (currentUser?.uid) {
+      const searches = await RecentSearchesService.getRecentSearches(currentUser.uid);
+      setRecentSearches(searches);
+    }
+  };
 
   // We now get exact formatted addresses from GeocodingService (Google preferred).
   const toExactAddress = (input?: string | null): string => (input || '').trim();
@@ -252,6 +266,50 @@ export default function LocationSearchView({ onClose }: LocationSearchViewProps)
   };
 
   const handleLocationSelect = async (result: SearchResult) => {
+    // Check if we're adding home or work address
+    const placeType = homeContext?.selectedPlaceType;
+    
+    if (placeType === 'home' || placeType === 'work') {
+      // Save home or work address
+      if (currentUser?.uid) {
+        await SavedPlacesService.savePlace(
+          currentUser.uid,
+          {
+            id: `${placeType}-${Date.now()}`,
+            type: placeType,
+            name: placeType === 'home' ? 'Home' : 'Work',
+            address: result.description,
+            coordinate: result.coordinates,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }
+        );
+        
+        // Clear the selectedPlaceType
+        if (homeContext?.setSelectedPlaceType) {
+          homeContext.setSelectedPlaceType(null);
+        }
+      }
+      
+      // Close search view
+      Keyboard.dismiss();
+      setTimeout(() => {
+        try { onClose(); } catch { }
+      }, 300);
+      return;
+    }
+
+    // Save to recent searches
+    if (currentUser?.uid && activeField === 'destination') {
+      await RecentSearchesService.saveSearch(
+        currentUser.uid,
+        result.description,
+        result.coordinates
+      );
+      // Reload recent searches
+      loadRecentSearches();
+    }
+
     if (activeField === 'pickup') {
       const exact = toExactAddress(result.description) || result.description;
       setPickupQueryFragment(formatAddress(exact));
@@ -335,6 +393,16 @@ export default function LocationSearchView({ onClose }: LocationSearchViewProps)
     setSearchResults([]);
     // Clear route when destination is cleared
     setRoutePoints([]);
+  };
+
+  const handleRecentSearchSelect = async (search: RecentSearch) => {
+    const result: SearchResult = {
+      description: search.address,
+      title: search.address.split(',')[0].trim(),
+      subtitle: search.address.split(',').slice(1).join(',').trim(),
+      coordinates: search.coordinate,
+    };
+    await handleLocationSelect(result);
   };
 
   const renderSearchResult = ({ item }: { item: SearchResult }) => (
@@ -479,6 +547,38 @@ export default function LocationSearchView({ onClose }: LocationSearchViewProps)
             <Text style={styles.noResultsSubText}>
               Prova att ändra din sökning eller kontrollera stavningen
             </Text>
+          </View>
+        ) : recentSearches.length > 0 && destinationIsFocused && queryFragment.length === 0 ? (
+          <View>
+            <View style={styles.recentHeader}>
+              <Icon name="time-outline" size={20} color="#666" />
+              <Text style={styles.recentHeaderText}>Senaste sökningar</Text>
+            </View>
+            <FlatList
+              data={recentSearches}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.resultItem}
+                  onPress={() => handleRecentSearchSelect(item)}
+                >
+                  <View style={[styles.iconContainer, { backgroundColor: '#9ca3af' }]}>
+                    <Icon name="time" size={16} color="white" />
+                  </View>
+                  <View style={styles.resultTexts}>
+                    <Text style={styles.resultTitle} numberOfLines={1}>
+                      {item.address.split(',')[0].trim()}
+                    </Text>
+                    <Text style={styles.resultSubtitle} numberOfLines={2}>
+                      {item.address.split(',').slice(1).join(',').trim()}
+                    </Text>
+                  </View>
+                  <Icon name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+              )}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            />
           </View>
         ) : null}
       </View>
@@ -630,5 +730,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#bbb',
     textAlign: 'center',
+  },
+  recentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  recentHeaderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
   },
 });

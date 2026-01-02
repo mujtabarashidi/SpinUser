@@ -796,7 +796,7 @@ export default function HomeScreen() {
               );
             }}
           >
-            <Text style={styles.loginButtonText}>Logga in eller skapa konto</Text>
+            <Text style={styles.loginButtonText}></Text>
           </TouchableOpacity>
         </>
       )}

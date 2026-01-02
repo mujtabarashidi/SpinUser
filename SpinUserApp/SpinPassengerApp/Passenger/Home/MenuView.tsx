@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingVertical: 16,
+    paddingVertical: 10,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: {
@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
   navButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 8,
     flex: 1,
   },
   navButtonText: {

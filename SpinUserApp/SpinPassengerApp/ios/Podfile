@@ -1,4 +1,6 @@
 # Resolve react_native_pods.rb with node to allow for hoisting
+require 'fileutils'
+require 'pathname'
 require Pod::Executable.execute_command('node', ['-p',
   'require.resolve(
     "react-native/scripts/react_native_pods.rb",
@@ -9,7 +11,7 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, '15.1'
 prepare_react_native_project!
 
-# Enable modular headers for Swift pods that depend on non-modular ObjC pods
+# Enable modular headers for Firebase Swift pods that need module maps
 use_modular_headers!
 
 linkage = ENV['USE_FRAMEWORKS']
@@ -41,6 +43,26 @@ target 'SpinPassengerApp' do
         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
         config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
       end
+    end
+
+    # Ensure gRPC modulemap lives where the build expects when modular headers are enabled
+    begin
+      headers_root = Pathname.new(installer.sandbox.root) / 'Headers'
+      grpc_public_dir = headers_root / 'Public' / 'gRPC-Core' / 'grpc'
+      grpc_private_dir = headers_root / 'Private' / 'grpc'
+      modulemap_src = Pathname.new(installer.sandbox.target_support_files_dir('gRPC-Core')) / 'gRPC-Core.modulemap'
+      modulemap_dst = grpc_public_dir / 'gRPC-Core.modulemap'
+
+      FileUtils.mkdir_p(grpc_public_dir)
+      FileUtils.mkdir_p(grpc_private_dir.parent)
+
+      if modulemap_src.exist? && !modulemap_dst.exist?
+        FileUtils.cp(modulemap_src.to_s, modulemap_dst.to_s)
+      end
+
+      FileUtils.ln_sf(grpc_public_dir.to_s, grpc_private_dir.to_s)
+    rescue => e
+      Pod::UI.puts "Skipping gRPC modulemap copy: #{e.message}"
     end
   end
 end

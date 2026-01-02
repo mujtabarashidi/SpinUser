@@ -37,6 +37,8 @@ type HomeContextType = {
   setDestinationCoordinate: React.Dispatch<React.SetStateAction<Coordinate | null>>;
   currentLocation: string;
   setCurrentLocation: React.Dispatch<React.SetStateAction<string>>;
+  selectedPlaceType?: 'home' | 'work' | null;
+  setSelectedPlaceType?: React.Dispatch<React.SetStateAction<'home' | 'work' | null>>;
   // Route state
   routePoints: RoutePoint[];
   setRoutePoints: React.Dispatch<React.SetStateAction<RoutePoint[]>>;
@@ -80,6 +82,8 @@ export const HomeContext = createContext<HomeContextType>({
   setDestinationCoordinate: () => { },
   currentLocation: '',
   setCurrentLocation: () => { },
+  selectedPlaceType: null,
+  setSelectedPlaceType: () => { },
   routePoints: [],
   setRoutePoints: () => { },
   isRouteLoading: false,
@@ -146,6 +150,7 @@ export const HomeProvider = ({ children }: PropsWithChildren<{}>) => {
   const [pickupCoordinate, setPickupCoordinate] = useState<Coordinate | null>(null);
   const [destinationCoordinate, setDestinationCoordinate] = useState<Coordinate | null>(null);
   const [currentLocation, setCurrentLocation] = useState('');
+  const [selectedPlaceType, setSelectedPlaceType] = useState<'home' | 'work' | null>(null);
 
   // Route state
   const [routePoints, setRoutePoints] = useState<RoutePoint[]>([]);
@@ -374,6 +379,8 @@ export const HomeProvider = ({ children }: PropsWithChildren<{}>) => {
       setDestinationCoordinate,
       currentLocation,
       setCurrentLocation,
+      selectedPlaceType,
+      setSelectedPlaceType,
       routePoints,
       setRoutePoints,
       isRouteLoading,
@@ -403,8 +410,7 @@ export const HomeProvider = ({ children }: PropsWithChildren<{}>) => {
       queryFragment,
       pickupCoordinate,
       destinationCoordinate,
-      currentLocation,
-      routePoints,
+      currentLocation,      selectedPlaceType,      routePoints,
       isRouteLoading,
       nearbyDrivers,
       isLoadingDrivers,

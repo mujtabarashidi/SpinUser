@@ -116,11 +116,7 @@ export default function SettingsView({ user }: { user?: any }) {
                 <SettingsRow icon="📄" color="#8e8e93" title="Användarvillkor" onPress={() => Linking.openURL('https://www.spintaxi.se/integritetspolicy/')} />
 
                 {/* Om appen */}
-                <Text style={styles.sectionHeader}>Om</Text>
-                <View style={styles.row}>
-                    <Text style={styles.rowText}>Version</Text>
-                    <Text style={styles.profileEmail}>{appVersion}</Text>
-                </View>
+               
             </ScrollView>
 
             <Modal
